@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>bHTTP Protocol Workbench | Binary Transport Inspector</title>
+  <meta name="description" content="Interactive visual debugger and binary frame inspector for bHTTP low-latency protocol (bserve & bcurl).">
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Header / Navigation -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
+          <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+          <polyline points="2 17 12 22 22 17"></polyline>
+          <polyline points="2 12 12 17 22 12"></polyline>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1>bHTTP <span class="highlight">Workbench</span></h1>
+        <span class="sub-badge">Binary Transport &amp; Frame Inspector</span>
+      </div>
+    </div>
+
+    <div class="header-status">
+      <div class="status-indicator online" id="server-status-pill">
+        <span class="pulse-dot"></span>
+        <span id="server-status-text">Server: 127.0.0.1:9000 (bserve)</span>
+      </div>
+      <div class="metric-pill">
+        <span class="metric-label">Latency:</span>
+        <span class="metric-val" id="header-latency">-- μs</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Grid Layout -->
+  <main class="main-layout">
+    <!-- Left Column: Controls & Composer -->
+    <section class="panel control-panel">
+      <!-- Scenario Presets -->
+      <div class="panel-section">
+        <div class="section-title">
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          <h3>Scenario Presets</h3>
+        </div>
+        <p class="section-desc">Instantly test standard, edge-case, and security behaviors.</p>
+        
+        <div class="preset-grid">
+          <button class="preset-btn active" id="btn-preset-200" data-preset="hello">
+            <span class="preset-icon">⚡</span>
+            <div class="preset-info">
+              <span class="preset-name">200 OK (Plain Text)</span>
+              <span class="preset-detail">GET /hello.txt</span>
+            </div>
+          </button>
+
+          <button class="preset-btn" id="btn-preset-html" data-preset="html">
+            <span class="preset-icon">🌐</span>
+            <div class="preset-info">
+              <span class="preset-name">200 OK (HTML Asset)</span>
+              <span class="preset-detail">GET /index.html</span>
+            </div>
+          </button>
+
+          <button class="preset-btn" id="btn-preset-css" data-preset="css">
+            <span class="preset-icon">🎨</span>
+            <div class="preset-info">
+              <span class="preset-name">200 OK (CSS Style)</span>
+              <span class="preset-detail">GET /style.css</span>
+            </div>
+          </button>
+
+          <button class="preset-btn" id="btn-preset-404" data-preset="404">
+            <span class="preset-icon">⚠️</span>
+            <div class="preset-info">
+              <span class="preset-name">404 Not Found</span>
+              <span class="preset-detail">GET /missing.txt</span>
+            </div>
+          </button>
+
+          <button class="preset-btn warning" id="btn-preset-traversal" data-preset="traversal">
+            <span class="preset-icon">🛡️</span>
+            <div class="preset-info">
+              <span class="preset-name">Directory Traversal</span>
+              <span class="preset-detail">GET /../../secret.txt</span>
+            </div>
+          </button>
+
+          <button class="preset-btn special" id="btn-preset-unknown" data-preset="unknown">
+            <span class="preset-icon">🧩</span>
+            <div class="preset-info">
+              <span class="preset-name">Unknown Frame Rule</span>
+              <span class="preset-detail">Inject Type 0x99 Payload</span>
+            </div>
+          </button>
+
+          <button class="preset-btn success" id="btn-preset-keepalive" data-preset="keepalive">
+            <span class="preset-icon">🔄</span>
+            <div class="preset-info">
+              <span class="preset-name">Keep-Alive Session</span>
+              <span class="preset-detail">3 Streams on 1 Socket</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Frame Composer -->
+      <div class="panel-section">
+        <div class="section-title">
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          <h3>Frame Composer</h3>
+        </div>
+
+        <form id="composer-form" class="composer-form" onsubmit="return false;">
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="req-method">Method (:method)</label>
+              <select id="req-method" class="form-control">
+                <option value="GET">GET (Static Index 0)</option>
+                <option value="HEAD">HEAD (Static Index 0)</option>
+                <option value="POST">POST (Static Index 0)</option>
+              </select>
+            </div>
+            <div class="form-group flex-1">
+              <label for="req-stream-id">Stream ID (31-bit)</label>
+              <input type="number" id="req-stream-id" class="form-control" value="1" min="1" step="2">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="req-path">Path (:path)</label>
+            <div class="input-with-prefix">
+              <input type="text" id="req-path" class="form-control" value="/hello.txt" placeholder="/path">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Extra Headers</label>
+            <div class="headers-editor" id="headers-editor">
+              <div class="header-row">
+                <span class="header-badge static">Static 7</span>
+                <input type="text" class="header-key" value="host" readonly>
+                <input type="text" class="header-val" value="127.0.0.1:9000" id="hdr-host">
+              </div>
+              <div class="header-row">
+                <span class="header-badge static">Static 6</span>
+                <input type="text" class="header-key" value="user-agent" readonly>
+                <input type="text" class="header-val" value="bcurl/1.0" id="hdr-ua">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-checkbox">
+            <label class="checkbox-container">
+              <input type="checkbox" id="inject-unknown-checkbox">
+              <span class="checkmark"></span>
+              Inject Unknown Frame (Type 0x99) before request
+            </label>
+          </div>
+
+          <button type="submit" id="btn-transmit" class="transmit-btn">
+            <span class="btn-glow"></span>
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            Transmit Binary Frame
+          </button>
+        </form>
+      </div>
+
+      <!-- Static HPACK Quick Reference -->
+      <div class="panel-section">
+        <div class="section-title">
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          <h3>Static HPACK Table (0–9)</h3>
+        </div>
+        <div class="static-table-preview">
+          <span class="table-pill"><code>0</code> :method</span>
+          <span class="table-pill"><code>1</code> :path</span>
+          <span class="table-pill"><code>2</code> :status</span>
+          <span class="table-pill"><code>3</code> content-type</span>
+          <span class="table-pill"><code>4</code> content-length</span>
+          <span class="table-pill"><code>5</code> server</span>
+          <span class="table-pill"><code>6</code> user-agent</span>
+          <span class="table-pill"><code>7</code> host</span>
+          <span class="table-pill"><code>8</code> date</span>
+          <span class="table-pill"><code>9</code> connection</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Interactive Frame Inspector & Hex Visualizer -->
+    <section class="panel inspector-panel">
+      <!-- Live Packet Transmission Line -->
+      <div class="packet-flow-container">
+        <div class="flow-node client-node">
+          <div class="node-icon">💻</div>
+          <div class="node-label">bcurl (Client)</div>
+        </div>
+        <div class="flow-track">
+          <div class="animated-packet" id="animated-packet"></div>
+          <div class="flow-direction-labels">
+            <span class="dir-out">HEADERS [Stream 1] ➔</span>
+            <span class="dir-in">⬅ HEADERS + DATA [200 OK]</span>
+          </div>
+        </div>
+        <div class="flow-node server-node">
+          <div class="node-icon">⚙️</div>
+          <div class="node-label">bserve (Server)</div>
+        </div>
+      </div>
+
+      <!-- Result Banner -->
+      <div class="result-banner" id="result-banner">
+        <div class="result-status">
+          <span class="status-badge" id="resp-status-badge">200 OK</span>
+          <span class="stream-badge" id="resp-stream-badge">Stream #1</span>
+          <span class="time-badge" id="resp-latency-badge">142 μs</span>
+        </div>
+        <div class="result-meta">
+          <span id="resp-mime-tag">text/plain</span>
+          <span class="dot-separator">•</span>
+          <span id="resp-size-tag">35 bytes</span>
+        </div>
+      </div>
+
+      <!-- Tabbed Views: Hex Inspector vs Decoded Headers vs Body Preview -->
+      <div class="tabs-container">
+        <div class="tab-buttons">
+          <button class="tab-btn active" id="tab-btn-hex" data-tab="tab-hex">
+            <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            Interactive Hex Inspector
+          </button>
+          <button class="tab-btn" id="tab-btn-headers" data-tab="tab-headers">
+            <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            Decoded Headers
+          </button>
+          <button class="tab-btn" id="tab-btn-body" data-tab="tab-body">
+            <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            Payload Output
+          </button>
+        </div>
+
+        <!-- Tab 1: Hex Inspector -->
+        <div class="tab-content active" id="tab-hex">
+          <!-- Legend -->
+          <div class="hex-legend">
+            <span class="legend-chip length">Length (24b)</span>
+            <span class="legend-chip type">Type (8b)</span>
+            <span class="legend-chip flags">Flags (8b)</span>
+            <span class="legend-chip stream">Stream ID (31b)</span>
+            <span class="legend-chip index">HPACK Index (1B)</span>
+            <span class="legend-chip val-len">Val Length (2B)</span>
+            <span class="legend-chip payload">Payload String</span>
+          </div>
+
+          <!-- Synchronized Hover Tooltip -->
+          <div class="hover-info-bar" id="hover-info-bar">
+            Hover over any hex byte below to inspect its field, offset, and specification mapping.
+          </div>
+
+          <div class="frames-view">
+            <!-- Outgoing Request Frame Dump -->
+            <div class="frame-card" id="req-frame-card">
+              <div class="frame-card-header">
+                <span class="frame-dir req">SENT</span>
+                <span class="frame-type-badge">HEADERS Frame</span>
+                <span class="frame-size-badge" id="req-frame-size">57 Bytes Total (9B Hdr + 48B Body)</span>
+              </div>
+              <div class="hex-dump-container" id="req-hex-dump"></div>
+            </div>
+
+            <!-- Incoming Response Headers Frame Dump -->
+            <div class="frame-card" id="resp-headers-frame-card">
+              <div class="frame-card-header">
+                <span class="frame-dir resp">RECEIVED</span>
+                <span class="frame-type-badge">HEADERS Frame</span>
+                <span class="frame-size-badge" id="resp-headers-size">106 Bytes Total (9B Hdr + 97B Body)</span>
+              </div>
+              <div class="hex-dump-container" id="resp-headers-hex-dump"></div>
+            </div>
+
+            <!-- Incoming Response DATA Frame Dump -->
+            <div class="frame-card" id="resp-data-frame-card">
+              <div class="frame-card-header">
+                <span class="frame-dir resp">RECEIVED</span>
+                <span class="frame-type-badge data">DATA Frame</span>
+                <span class="frame-size-badge" id="resp-data-size">44 Bytes Total (9B Hdr + 35B Body)</span>
+              </div>
+              <div class="hex-dump-container" id="resp-data-hex-dump"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Decoded Headers -->
+        <div class="tab-content" id="tab-headers">
+          <div class="headers-tables">
+            <div class="headers-block">
+              <h4>Request Headers Sent</h4>
+              <table class="headers-table" id="table-req-headers">
+                <thead><tr><th>Field</th><th>Value</th><th>Encoding</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <div class="headers-block">
+              <h4>Response Headers Received</h4>
+              <table class="headers-table" id="table-resp-headers">
+                <thead><tr><th>Field</th><th>Value</th><th>Encoding</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Payload Output -->
+        <div class="tab-content" id="tab-body">
+          <div class="body-viewer-card">
+            <div class="body-viewer-header">
+              <span id="body-preview-title">Response Content</span>
+              <button class="copy-btn" id="btn-copy-body">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                Copy
+              </button>
+            </div>
+            <pre class="body-pre"><code id="body-content"></code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
